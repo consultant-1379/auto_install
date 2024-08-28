@@ -1,0 +1,15 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="GetDiskListSuite">
+    <test name="Get Disk List">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpScenario" />     	
+            <class name="com.ericsson.infrastructure.test.cases.firstBootScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpClientsScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceAddScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpClientsScenario" />            
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceListScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceRemoveByNameScenario" />
+	</classes>
+    </test>
+</suite>
+

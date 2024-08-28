@@ -1,0 +1,11 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="InstallMWS">
+    <test name="InstallMWS">
+        <classes>
+             <class name="com.ericsson.infrastructure.test.cases.MasterShScenario" /> 
+             <class name="com.ericsson.infrastructure.test.cases.InstallWgetScenario" /> 
+             <class name="com.ericsson.infrastructure.test.cases.CreateSolarisRepoScenario" /> 
+      	</classes>
+    </test>
+</suite>
+

@@ -1,0 +1,9 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="firstBootSuite">
+    <test name="firstBootSuite">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.firstBootScenario" />
+	</classes>
+    </test>
+</suite>
+

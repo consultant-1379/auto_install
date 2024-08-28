@@ -1,0 +1,96 @@
+#!/bin/bash
+#*****************
+# Define variables
+#*****************
+DIFF=/usr/bin/diff
+ECHO=echo
+PASSED=true
+
+SCRIPT="/gdl/egraloc/Solaris_11/get_disk_list.sh"
+EXPECTED="/gdl/egraloc/Solaris_11/TC_get_disk_list.txt"
+
+#***************
+# Positive tests
+#***************
+POS_TESTS=("-n"
+           "-n"
+           "-n -r"
+           "-n -f"
+           "-n -f -c"
+           "-n -f -d '-'"
+           "-n -m -f"
+           "-n -e 'c2' -f"
+           "-n -f -c"
+           "-n -f -c -m -v"
+           "-n -f -c -m -D"
+           "-n -v -D")
+
+#***************
+# Negative tests
+#***************
+NEG_TESTS=("-z"
+           "-d"
+           "-c"
+           "-n -f -d '-' -c")
+
+### Function: run_test ###
+#
+#   Run get_disk_list.sh with options
+#
+# Arguments:
+#       $1: options
+# Return Values:
+#       0 : Test passed
+#       >0: Test failed
+#######################################
+run_test()
+{
+  #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  ${ECHO} "Running: ${SCRIPT} ${@}"
+  #<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+  ${SCRIPT} ${@}
+  return $?
+}
+
+${ECHO} "Positive tests"
+${ECHO} "--------------"
+for TEST in "${POS_TESTS[@]}"
+do
+  run_test ${TEST} && { ${ECHO} "Test Passed\n"; } ||
+                      { ${ECHO} "RES=$?";
+                        PASSED=false;
+                        ${ECHO} "Test Failed\n"; }
+done
+
+${ECHO} "Negative tests"
+${ECHO} "--------------"
+for TEST in "${NEG_TESTS[@]}"
+do
+  run_test ${TEST} && { PASSED=false;
+                        ${ECHO} "Test Failed (Negative Test)\n"; } ||
+                      { ${ECHO} "RES=$?";
+                        ${ECHO} "Test Passed (Negative Test)\n"; }
+done
+
+#************************************
+# Test that the output is correct.
+# This requires ${EXPECTED} to exist
+# and be correct for the server which
+# is being tested.
+# Uses anonymous named pipes <(cmd)
+# rather than temporary files.
+#************************************
+${ECHO} "Checking output"
+${ECHO} "---------------"
+${ECHO} "Running: ${DIFF} <(${SCRIPT} -n -f -c) <(cat ${EXPECTED})"
+
+${DIFF} <(${SCRIPT} -n -f -c) <(cat ${EXPECTED}) && { ${ECHO} "Test Passed\n"; } ||
+                                                    { ${ECHO} "RES=$?";
+                                                      PASSED=false;
+                                                      ${ECHO} "Test Failed\n"; }
+
+${PASSED} && { ${ECHO} "TEST PASSED";
+               exit 0; } ||
+             { ${ECHO} "TEST FAILED";
+               exit 1; }

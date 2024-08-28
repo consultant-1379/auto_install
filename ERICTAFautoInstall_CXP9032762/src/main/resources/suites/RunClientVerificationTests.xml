@@ -1,0 +1,11 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="RunClientVerificationTests">
+    <test name="RunClientVerificationTests">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.VerifyInstalledClientScenario"/> 
+            <class name="com.ericsson.infrastructure.test.cases.CheckPackageScenario"/> 
+            <class name="com.ericsson.infrastructure.test.cases.firstBootScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.IPToolClientVerificationScenario" />
+	</classes>
+    </test>
+</suite>

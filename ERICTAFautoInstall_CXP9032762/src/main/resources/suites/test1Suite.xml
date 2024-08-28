@@ -1,0 +1,10 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="test1Suite">
+    <test name="test1Suite">
+        <classes>
+        	<class name="com.ericsson.infrastructure.test.cases.CacheLatestMediaOnMwsScenario" />
+        	<class name="com.ericsson.infrastructure.test.cases.ListMediaOnMwsScenario" />
+            </classes>
+    </test>
+</suite>
+

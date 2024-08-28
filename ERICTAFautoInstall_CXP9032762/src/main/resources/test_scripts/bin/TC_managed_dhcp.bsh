@@ -1,0 +1,476 @@
+#!/bin/bash
+#*****************
+# Define variables
+#*****************
+BASENAME=/usr/bin/basename
+CAT=/usr/bin/cat
+CLEAR=/usr/bin/clear
+CUT=/usr/bin/cut
+DIFF=/usr/bin/diff
+ECHO=/usr/bin/echo
+EXPECT=/usr/bin/expect
+GREP=/usr/bin/grep
+RM=/usr/bin/rm
+TEE=/usr/bin/tee
+
+SCRIPT="/ericsson/autoinstall/bin/manage_dhcp.bsh"
+TMP_FILE="/tmp/.test_summary"
+TMP_PARAM_FILE="/tmp/.param_file"
+
+PASSED=true
+
+### Function: usage_msg ###
+#
+#  Usage message
+#
+# Arguments:
+#   none
+# Return Values:
+#   none
+usage_msg()
+{
+$CLEAR
+$ECHO "
+Usage: `$BASENAME $0` -d <DNS IP> -i <network ip> -m <netmask> -n <domain name> -r <route ip> -t <timeserver ip or none>
+
+options:
+
+-d  : DNS server IP
+
+-f  : Parameter file with network details
+
+-i  : Network IP to be added or removed
+
+-m  : Netmask of the network
+
+-n  : Domain name for the network
+
+-r  : Router or Gateway IP for the network
+
+-t  : Timeserver IP address IP address or none
+
+"
+}
+
+
+while getopts ":d:g:i:m:n:r:t:" arg; do
+    case $arg in
+        d) DNS_SERVER="$OPTARG"
+            ;;
+        i) IP_NET="$OPTARG"
+            ;;
+        m) NETMASK="$OPTARG"
+            ;;
+        n) DOMAIN_NAME="$OPTARG"
+            ;;
+        r) ROUTER="$OPTARG"
+            ;;
+        t) TIME_SERVER="$OPTARG"
+            ;;
+        \?) usage_msg
+            exit 1
+        ;;
+    esac
+done
+shift `expr $OPTIND - 1`
+
+if [ ! "${IP_NET}" ]; then
+    usage_msg
+    exit 1
+fi
+
+#########################################
+#
+# Test toadd DHCP network interactively
+#
+#########################################
+add_net_interactive()
+{
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a add -s network
+while 1 {
+    expect {
+        "Enter network IP address" {
+            send "$IP_NET\r"}
+
+        "Enter IP netmask for netmask" {
+            send "$NETMASK\r"}
+
+        "Enter default router IP address for network" {
+            send "$ROUTER\r"}
+
+        "Enter space-separated list of DNS servers for network" {
+            send "$DNS_SERVER\r"}
+
+        "Enter DNS domain for network" {
+            send "$DOMAIN_NAME\r"}
+
+        "Enter space-separated list of NTP time servers or 'none' for network" {
+            send "$TIME_SERVER\r"}
+
+        "Are the details above correct? (Yes|No)" {
+            send "Yes\r"
+            sleep 10
+            break}
+
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Add DHCP network from params file
+#
+########################################
+add_net_params_file()
+{
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a add -s network -f $TMP_PARAM_FILE
+while 1 {
+    expect {
+        "Are the details above correct?" {
+            send "Yes\r"
+            sleep 10
+            break}
+
+        "already defined in DHCP tables" {
+            puts "Network already defined"
+            exit 1}
+        }
+    }
+EOF
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# List dhcp networks
+#
+########################################
+list_net()
+{
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a list -s network
+while 1 {
+    expect {
+        "Press return key to continue" {
+            send -- "\r"
+            break}
+
+        eof {
+            puts "Networks listed"
+            break}
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Remove dhcp networks interactively
+#
+########################################
+remove_net_interactively()
+{
+_net_to_delete_=`$SCRIPT -a list -s network | $GREP $IP_NET | $CUT -c 2`
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a remove -s network
+while 1 {
+    expect {
+        "Select number of the DHCP network you wish to delete" {
+            send "$_net_to_delete_\r"}
+
+        "Are you sure you wish to delete the selected network" {
+            send "Yes\r"
+            sleep 10
+            break}
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# List specific dhcp network using -n
+#
+########################################
+list_net_cmdline()
+{
+sleep 20
+$SCRIPT -a list -s network -n $IP_NET
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Remove specific dhcp network using -n
+#
+########################################
+remove_net_cmdline()
+{
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a remove -s network -n $IP_NET
+while 1 {
+    expect {
+        "Are you sure you wish to delete the selected network? (Yes|No)" {
+            send "Yes\r"
+            sleep 10
+            break}
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Add a DHCP network from params file
+# without user confirmation
+#
+########################################
+add_net_params_file_noconfirm()
+{
+$EXPECT << EOF
+set timeout 40
+spawn $SCRIPT -a add -s network -f $TMP_PARAM_FILE -N
+while 1 {
+    expect {
+        "Successfully added network" {
+            sleep 10
+            break}
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Remove a DHCP network using -n
+# without user confirmation
+#
+########################################
+remove_net_cmdline_noconfirm()
+{
+$EXPECT << EOF
+set timeout 40
+sleep 20
+spawn $SCRIPT -a remove -s network -n $IP_NET -N
+while 1 {
+    expect {
+
+        "Succesfully removed network" {
+            sleep 10
+            break}
+
+        timeout {
+            puts "WARNING: timed out"
+            exit 1}
+        }
+    }
+EOF
+
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+else
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+fi
+
+}
+
+########################################
+#
+# Negative test case to check invalid
+# parameter passed
+#
+########################################
+test_invalid_option()
+{
+$SCRIPT -l -D
+if [ $? -eq 0 ];then
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+else
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+fi
+
+}
+
+########################################
+#
+# Negative test case to pass parameter
+# without value
+#
+########################################
+test_parameter_null_value()
+{
+$SCRIPT -a -s network
+if [ $? -eq 0 ]; then
+    $ECHO "\nTest ${FUNCNAME[0]} failed" | $TEE -a ${TMP_FILE}
+    PASSED=false
+    return 1
+else
+    $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+    return 0
+fi
+
+}
+
+
+
+### MAIN BODY OF THE PROGRAMM ###
+
+$CAT > $TMP_PARAM_FILE << EOF
+NETWORK_IP_ADDR@$IP_NET
+NETWORK_NETMASK@$NETMASK
+DEFAULTROUTER@$ROUTER
+DNSDOMAIN@$DOMAIN_NAME
+DNSSERVERS@$DNS_SERVER
+TIMESERVER@$TIME_SERVER
+EOF
+
+$ECHO "####### SUMARRY OF TEST RESULTS #######" >> ${TMP_FILE}
+
+#### Positive tests ####
+
+# Test to add DHCP network interactively
+add_net_interactive
+sleep 10
+
+# Test to list DHCP networks
+list_net
+sleep 10
+
+# Test to remove network interactively
+remove_net_interactively
+sleep 10
+
+# Test to add DHCP network from params file
+add_net_params_file
+sleep 10
+
+# Test to list specific network
+list_net_cmdline
+sleep 10
+
+# Test to remove specific network
+remove_net_cmdline
+sleep 10
+
+# Test to add DHCP network from params file without user confirmation
+add_net_params_file_noconfirm
+sleep 10
+
+# Test to remove a DHCP network using -n without user confirmation
+remove_net_cmdline_noconfirm
+sleep 5
+
+#### Some negative tests ####
+
+# Test with an invalid option
+test_invalid_option
+sleep 5
+
+# Test without passing a parameter value
+test_parameter_null_value
+sleep 5
+
+$CLEAR
+$CAT ${TMP_FILE}
+$RM -rf ${TMP_FILE}
+$RM -rf ${TMP_PARAM_FILE}
+
+${PASSED} && { ${ECHO} "TEST PASSED"; exit 0; } ||
+             { ${ECHO} "TEST FAILED"; exit 1; }
+

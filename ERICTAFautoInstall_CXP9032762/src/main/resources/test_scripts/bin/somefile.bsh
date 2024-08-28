@@ -1,0 +1,11 @@
+echo "*********************"
+echo "This is a Simple test"
+echo "*********************"
+echo ""
+echo ""
+echo "HOSTNAME is ******* SIMPLE TEST SCRIPT *********** "
+echo "HOSTNAME is ******* `hostname` *********** "
+echo "HOSTNAME is ******* `hostname` *********** "
+# Simulate script Failure
+# echo "******* Simulate failure *********** "
+# exit 1

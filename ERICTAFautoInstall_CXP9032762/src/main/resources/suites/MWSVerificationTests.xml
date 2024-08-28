@@ -1,0 +1,14 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="MWSVerificationTests">
+    <test name="MWSVerificationTests">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpScenario" />     	
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpClientsScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceRemoveScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceAddInteractiveScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceRemoveByNameScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceNegativeScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceAddScenario" />
+	</classes>
+    </test>
+</suite>

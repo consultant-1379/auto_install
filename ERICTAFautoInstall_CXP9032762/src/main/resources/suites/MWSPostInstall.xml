@@ -1,0 +1,10 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="MWSPostInstall">
+    <test name="MWSPostInstall">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.ManageDhcpNetworkAddScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.firstBootScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceListScenario" />
+            </classes>
+    </test>
+</suite>

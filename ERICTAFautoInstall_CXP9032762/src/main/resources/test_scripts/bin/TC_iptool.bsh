@@ -1,0 +1,341 @@
+#!/bin/bash
+#*****************
+# Define variables
+#*****************
+BASENAME=/usr/bin/basename
+CAT=/usr/bin/cat
+CLEAR=/usr/bin/clear
+CP=/usr/bin/cp
+CUT=/usr/bin/cut
+DIFF=/usr/bin/diff
+ECHO=/usr/bin/echo
+EXPECT=/usr/bin/expect
+IPADM=/usr/sbin/ipadm
+IPTOOL=/opt/ERICiptool/bin/iptool
+GREP=/usr/bin/grep
+RM=/usr/bin/rm
+TEE=/usr/bin/tee
+
+SCRIPT="/ericsson/autoinstall/bin/manage_dhcp.bsh"
+TMP_FILE="/tmp/.test_summary"
+TMP_PARAM_FILE="/tmp/.param_file"
+
+### Function: usage_msg ###
+#
+#  Usage message
+#
+# Arguments:
+#   none
+# Return Values:
+#   none
+usage_msg()
+{
+$CLEAR
+$ECHO "
+Usage: `$BASENAME $0` -i <HOST IPV6> -r <router ip> -n <hostname> -h <yes|no> -s <subnet>
+
+options:
+
+-i  : Host IPV6 address
+
+-r  : Router IPV6 address
+
+-n  : Hostname to add
+
+-s  : Subnet of host
+
+-h  : yes if add to hosts file, no if remove from hosts file
+
+"
+}
+
+
+while getopts ":i:r:n:s:" arg; do
+    case $arg in
+        n) IPHOST="$OPTARG"
+            ;;
+        i) IPV6="$OPTARG"
+            ;;
+        r) IPROUTER="$OPTARG"
+            ;;
+        s) SUBNET="$OPTARG"
+            ;;
+        \?) usage_msg
+            exit 1
+        ;;
+    esac
+done
+shift `expr $OPTIND - 1`
+
+if [ ! "${IPHOST}" ]; then
+    usage_msg
+    exit 1
+fi
+if [ ! "${IPV6}" ]; then
+    usage_msg
+    exit 1
+fi
+if [ ! "${IPROUTER}" ]; then
+    usage_msg
+    exit 1
+fi
+if [ ! "${SUBNET}" ]; then
+    usage_msg
+    exit 1
+fi
+
+#########################################
+#
+# Utility method to remove old net0
+#
+#########################################
+remove_old_net0() {
+    # Remove old entries first
+    $IPADM delete-addr -r net0/v6 > /dev/null 2>&1
+    $IPADM delete-addr net0/v6a > /dev/null 2>&1
+    # Check address not in $IPADM output
+    $IPADM | grep ${IPV6} > /etc/null
+    if [ $? -eq 0 ]; then
+	return 1
+    fi
+    return 0
+}
+
+#########################################
+#
+# Remove host from hostfile and run ipTOOL
+#
+#########################################
+add_iptool_hostnotpresent()
+{
+    # Remove old entries first
+    remove_old_net0
+    if [ $? -ne 0 ]; then
+        _message_="IPV6 already visible in ipadm output"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    $CP /etc/inet/hosts /etc/inet/hosts.$$
+    $GREP -v ${IPHOST} /etc/inet/hosts.$$ > /etc/inet/hosts
+    if [ $? -ne 0 ]; then
+        _message_="Failed to remove host address from /etc/inet/hosts"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    _message_="**Running IPTool to configure interface**\n"
+    _message_+="$IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}"
+    generate_report "$_message_" INFO
+    $IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}
+    if [ $? -ne 0 ]; then
+        _message_="IPTOOL failed"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="**IPTool succeeded**"
+	generate_report "$_message_" INFO
+    fi
+    # Check address is in host file
+    $GREP ${IPV6} /etc/hosts | grep ${IPHOST} > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="Address is not in hosts file"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="Address is in hosts file"
+	generate_report "$_message_" INFO
+    fi
+
+    # Check address is in ipadm results
+    $IPADM | $GREP ${IPV6}/${SUBNET} | $GREP static > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="IPV6 address not present in ipadm results"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+        _message_="IPV6 address is present in ipadm results"
+	generate_report "$_message_" PASS
+        return 0
+    fi
+}
+
+#########################################
+#
+# Re-run iptool when already configured
+#
+#########################################
+rerun_iptool()
+{
+    # Check already configured
+    $GREP "${IPHOST}" /etc/inet/hosts
+    if [ $? -ne 0 ]; then
+        _message_="Initial state incorrect, address not in /etc/inet/hosts"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    # Check address is in ipadm results
+    $IPADM | $GREP ${IPV6}/${SUBNET} | $GREP static > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="Initial state incorrect, address not in ipadm results"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    # Now re-run iptool
+    _message_="**Running IPTool to configure interface**\n"
+    _message_+="$IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}"
+    generate_report "$_message_" INFO
+    $IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}
+    if [ $? -ne 0 ]; then
+        _message_="IPTOOL failed"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="**IPTool succeeded**"
+	generate_report "$_message_" INFO
+    fi
+    # Check address is in host file
+    $GREP ${IPV6} /etc/hosts | grep ${IPHOST} > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="Address is not in hosts file"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="Address is in hosts file"
+	generate_report "$_message_" INFO
+    fi
+    # Check address is in ipadm results
+    $IPADM | $GREP ${IPV6}/${SUBNET} | $GREP static > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="IPV6 address not present in ipadm results"
+	generate_report "$_message_" FAIL
+    else
+        $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+        _message_="IPV6 address is present in ipadm results"
+	generate_report "$_message_" PASS
+        return 0
+    fi
+
+}
+
+#########################################
+#
+# Add host to hostfile and run ipTOOL
+#
+#########################################
+add_iptool_hostpresent()
+{
+    # Remove old entries first
+    remove_old_net0
+    if [ $? -ne 0 ]; then
+        _message_="IPV6 already visible in ipadm output"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    $GREP "${IPHOST}" /etc/inet/hosts
+    if [ $? -ne 0 ]; then
+        $CP /etc/inet/hosts /etc/inet/hosts.$$
+	$ECHO "${IPHOST} ${IPV6}" >> /etc/inet/hosts
+    fi
+    $GREP "${IPHOST}" /etc/inet/hosts
+    if [ $? -ne 0 ]; then
+        _message_="Failed to add host address to /etc/inet/hosts"
+	generate_report "$_message_" FAIL
+	return 1
+    fi
+    _message_="**Running IPTool to configure interface**\n" 
+    _message_+="$IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}"
+    generate_report "$_message_" INFO
+    $IPTOOL -hostip ${IPV6}/${SUBNET} -router ${IPROUTER}
+    if [ $? -ne 0 ]; then
+        _message_="IPTOOL failed"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="**IPTool succeeded**"
+	generate_report "$_message_" INFO
+    fi
+    # Check address is in host file
+    $GREP ${IPV6} /etc/hosts | grep ${IPHOST} > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="Address is not in hosts file"
+	generate_report "$_message_" FAIL
+	return 1
+    else
+        _message_="Address is in hosts file"
+	generate_report "$_message_" INFO
+    fi
+    # Check address is in ipadm results
+    $IPADM | $GREP ${IPV6}/${SUBNET} | $GREP static > /dev/null
+    if [ $? -ne 0 ]; then
+        _message_="IPV6 address not present in ipadm results"
+	generate_report "$_message_" FAIL
+    else
+        $ECHO "\nTest ${FUNCNAME[0]} passed" | $TEE -a ${TMP_FILE}
+        _message_="IPV6 address is present in ipadm results"
+	generate_report "$_message_" PASS
+        return 0
+    fi
+
+}
+
+### Function: generate_report ###
+#
+# Generate the report according to the test output
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+generate_report()
+{
+_message_="$1"
+_message_type_=$2
+
+if [[ $_message_type_ == "PASS" ]]; then
+    _pass_count_=$((_pass_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+if [[ $_message_type_ == "FAIL" ]]; then
+    _fail_count_=$((_fail_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+if [[ $_message_type_ == "INFO" ]]; then
+    _info_count_=$((_info_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+}
+
+
+### MAIN BODY OF THE PROGRAMM ###
+
+_pass_count_=0
+_fail_count_=0
+_info_count_=0
+
+$CLEAR
+
+# Test to run IPTool
+# Test 1 - run IPTool no entry present
+add_iptool_hostnotpresent
+# Test 2 - re-run IPTool 
+rerun_iptool
+# Test 3 - run IPTool no address present
+add_iptool_hostpresent
+
+sleep 10
+$ECHO "\n########################### Summary #############################" | $TEE -a $TEST_REPORT
+$ECHO "\nNumber of Test Cases Passed : $_pass_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nNumber of Test Cases Failed : $_fail_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nTotal Test Cases : $((_pass_count_+_fail_count_))" | $TEE -a $TEST_REPORT
+$ECHO "\nInformation messages : $_info_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nFor Additional details check ${TEST_REPORT}" | $TEE -a $TEST_REPORT
+$ECHO "\n###################### End Of Test Report #######################" | $TEE -a $TEST_REPORT
+
+$ECHO "\n$RUN_TIME Successfully finished executing iptool_test" | $TEE -a $TEST_REPORT
+
+if [ $_fail_count_ -ne 0 ]; then
+    exit 1
+else
+    exit 0
+fi
+

@@ -1,0 +1,512 @@
+#!/bin/bash
+# ********************************************************************
+# Ericsson Radio Systems AB                                     SCRIPT
+# ********************************************************************
+#
+#
+# (c) Ericsson Radio Systems AB 2016 - All rights reserved.
+#
+# The copyright to the computer program(s) herein is the property
+# of Ericsson Radio Systems AB, Sweden. The programs may be used
+# and/or copied only with the written permission from Ericsson Radio
+# Systems AB or in accordance with the terms and conditions stipulated
+# in the agreement/contract under which the program(s) have been
+# supplied.
+#
+# ********************************************************************
+# Name    : first_boot_test
+# Date    : 19/05/2016
+# Revision: A
+# Purpose : The purpose of the script is to perform the post-installation
+#           phases of the Ericsson server
+#
+# Usage   : first_boot_test
+#
+# Revision
+# History :
+# 14/11/2016 egraloc OSS-142198 Check ephemeral port allocation algorithm
+# ********************************************************************
+# ********************************************************************
+#
+# 	Command Section
+#
+# ********************************************************************
+BASENAME=/usr/bin/basename
+CAT=/usr/bin/cat
+CLEAR=/usr/bin/clear
+CUT=/usr/bin/cut
+DATE=/usr/bin/date
+DIRNAME=/usr/bin/dirname
+ECHO=/usr/bin/echo
+EGREP=/usr/bin/egrep
+GREP=/usr/bin/grep
+IPADM=/usr/sbin/ipadm
+LS=/usr/bin/ls
+MKDIR=/usr/bin/mkdir
+NAWK=/usr/bin/nawk
+PKG=/usr/bin/pkg
+SED=/usr/bin/sed
+SVCS=/usr/bin/svcs
+TEE=/usr/bin/tee
+TOUCH=/usr/bin/touch
+ZFS=/usr/sbin/zfs
+
+# ********************************************************************
+#
+#       Configuration Section
+#
+# ********************************************************************
+# Path to generic config directory under mounted root
+GENERIC_CONFIG_DIR=/var/tmp/eric_bootstrap/config
+
+### Function: allow_root_ssh ###
+#
+# Check if root_ssh is allowed
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+allow_root_ssh()
+{
+_root_ssh_=`cat /etc/ssh/sshd_config | $EGREP "^[ ]*PermitRootLogin[ ]+yes[ ]*$" | $CUT -d" " -f2`
+if [[ $_root_ssh_ == "yes" ]]; then
+    _message_="Root SSH is allowed" 
+    generate_report "$_message_" PASS   
+else
+    _message_="Root SSH is not allowed"
+    generate_report "$_message_" FAIL
+fi
+}
+
+### Function: check_firstboot_package ###
+#
+# Check if firstboot package is uninstalled
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_firstboot_package()
+{
+$PKG list ERICfirstboot >/dev/null 2>&1
+if [ $? -eq 0 ]; then    
+    _message_="ERICfirstboot package is not uninstalled."
+    generate_report "$_message_" FAIL
+else
+    _message_="ERICfirstboot package is uninstalled."
+    generate_report "$_message_" PASS
+fi
+}
+
+### Function: check_firstboot_service ###
+#
+# Check status of service
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_firstboot_service()
+{
+$SVCS svc:/site/first-boot-script-svc:default >/dev/null 2>&1
+if [ $? -ne 0 ]; then    
+    _message_="first-boot-script-svc service is not present"
+    generate_report "$_message_" PASS
+else
+   _message_="first-boot-script-svc service is present"
+    generate_report "$_message_" FAIL
+fi
+}
+
+### Function: check_gdm_service ###
+#
+# Check status of service
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_gdm_service()
+{
+gdm_status=`$SVCS -H -o STA gdm` >/dev/null 2>&1
+if  [[ `grep system /ericsson/config/ericsson_use_config` ]]; then
+    if [[ $gdm_status == "DIS" ]]; then
+        _message_="gdm service is disabled"
+	generate_report "$_message_" PASS
+    else
+        _message_="gdm service is not disabled"
+	generate_report "$_message_" FAIL
+    fi
+else
+    if [[ $gdm_status == "DIS" ]]; then
+        _message_="gdm service is disabled"
+	generate_report "$_message_" FAIL
+    else 
+        _message_="gdm service is not disabled"
+	generate_report "$_message_" PASS
+    fi
+fi
+}
+
+### Function: check_bootrap_sw_bundle ###
+#
+# Check if 
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_bootrap_sw_bundle()
+{
+if [[ ! -f $SW_CONF_DIR/solonly ]]; then
+    $LS /var/tmp/eric_bootstrap/ >/dev/null
+	if [ $? -ne 0 ]; then    
+	    _message_="Software bundle is not present"
+		generate_report "$_message_" FAIL
+	else
+	    _message="SW bundle is successfully extracted and present"
+		generate_report "$_message_" PASS
+    	if [ `$LS ${GENERIC_CONFIG_DIR} | wc -l` -eq 0 ]; then
+			_message_="Config data in ${GENERIC_CONFIG_DIR} not found"
+			generate_report "$_message_" FAIL
+	    else
+		    _message_="Config data in ${GENERIC_CONFIG_DIR} is present"
+			generate_report "$_message_" PASS
+	    fi
+    fi
+else	    
+	_message_="No Software will be present on a solonly machine"
+	generate_report "$_message_" INFO
+fi
+}
+
+### Function: chk_create_test_report ###
+#
+# Check and create the test audit log
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+chk_create_test_report()
+{
+$MKDIR -p `$DIRNAME ${TEST_REPORT}`
+if [ $? -ne 0 ]; then
+    $ECHO "Could not create directory `$DIRNAME ${TEST_REPORT}`"
+fi
+
+$TOUCH -a ${TEST_REPORT}
+if [ $? -ne 0 ]; then
+    $ECHO "Could not write to file ${TEST_REPORT}"
+fi
+}
+
+### Function: config_directory ###
+#
+# Verify contents of config directory
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+config_directory()
+{
+$LS ${SW_CONF_DIR}>/dev/null 2>&1
+if [ $? -ne 0 ]; then    
+	_message_="Config directory is removed ${SW_CONF_DIR}"
+	generate_report "$_message_" PASS
+else 
+    _message_="Config directory is not removed ${SW_CONF_DIR}"
+	generate_report "$_message_" FAIL
+fi
+}
+
+### Function: configure_mws ###
+#
+# Verify if mws related configurations are proper
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+configure_mws()
+{
+if [[ $_install_server_type_ == "mws" ]]; then
+    $ZFS get share | $GREP JUMP >/dev/null
+    if [ $? -ne 0 ]; then    
+		_message_="ZFS share JUMP is not created"
+		generate_report "$_message_" FAIL
+	fi
+else 
+    _message_="ZFS share JUMP is created"
+	generate_report "$_message_" PASS
+fi
+}
+
+### Function: generate_report ###
+#
+# Generate the report according to the test output
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+generate_report()
+{
+_message_="$1"
+_message_type_=$2
+
+if [[ $_message_type_ == "PASS" ]]; then
+    _pass_count_=$((_pass_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+if [[ $_message_type_ == "FAIL" ]]; then
+    _fail_count_=$((_fail_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+if [[ $_message_type_ == "INFO" ]]; then
+    _info_count_=$((_info_count_+1))
+    $ECHO "$_message_type_ : $_message_" | $TEE -a ${TEST_REPORT}
+fi
+}
+
+### Function: save_installation_params ###
+#
+# Verify if installation parameters are saved properly
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+save_installation_params()
+{
+$LS ${SW_CONF_DIR}/*_sw_locate >/dev/null
+if [ $? -ne 0 ]; then    
+	_message_="sw_locate file not found"
+	generate_report "$_message_" FAIL
+else 
+    _message_="om_sw_locate is present"
+	generate_report "$_message_" PASS
+fi
+}
+
+# Set and unset Runtime
+#
+# Arguments:
+#       none
+# Return Values:
+#       none
+_script_run_time_()
+{
+unset RUN_TIME
+RUN_TIME=`$DATE '+%Y-%b-%d_%H.%M.%S'`
+}
+
+### Function: update_syslog ###
+#
+# Verify if syslog is updated
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+update_syslog()
+{
+$GREP "*.err;kern.notice" /etc/syslog.conf
+if [ $? -eq 1 ]; then
+    _message_="syslog.conf is updated correctly"
+	generate_report "$_message_" PASS
+else
+    _message_="syslog.conf is not updated correctly"
+	generate_report "$_message_" FAIL
+fi
+}
+
+### Function: check_ephemeral ###
+#
+# Verify if ephemeral port allocation algorithm is correct
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_ephemeral()
+{
+$GREP "set ip:tcp_random_anon_port = 0" /etc/system >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    _message_="Ephemeral port allocation algorithm is correct"
+	generate_report "$_message_" PASS
+else
+    _message_="Ephemeral port allocation algorithm is not correct"
+	generate_report "$_message_" FAIL
+fi
+}
+
+### Function: unset_publisher ###
+#
+# Verify unset publisher is passed of failed
+#
+# Arguments:
+#       none
+# Return Values:
+#       none
+unset_publisher()
+{
+local publisher_names=($(/bin/pkg publisher | /bin/egrep -v "^PUBLISHER" | /bin/awk '{print $1}'))
+if [[ ${publisher_names} != "" ]] ; then
+    _message_="${publisher_names} publisher has been set."
+    generate_report "$_message_" FAIL
+else
+    _message_="No publisher has been set."
+    generate_report "$_message_" PASS
+fi
+}
+
+### Function: check_ipv6_addr_setup ###
+#
+# Check if IPV6 address is plumbed
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_ipv6_addr_setup()
+{
+_hostname_=`hostname`
+    CLIENT_IP_ADDR_V6=`$CAT ${GENERIC_CONFIG_DIR}/${_hostname_}/${_hostname_}_jmp_cfg.txt | $GREP CLIENT_IP_ADDR_V6 | $NAWK -F= '{print $2}' | \
+    $SED -e 's/"//g'`
+
+if [[ $CLIENT_IP_ADDR_V6 != "none" ]]; then	
+    CLIENT_IP_ADDR_V6_TMP=`$ECHO $CLIENT_IP_ADDR_V6 | $SED 's/:0/:/g'` >/dev/null 2>&1
+    $IPADM show-addr | $GREP  "$CLIENT_IP_ADDR_V6_TMP">/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        _message_="IPV6 address is plumbed with $CLIENT_IP_ADDR_V6 address"
+	    generate_report "$_message_" PASS
+    else
+        _message_="IPV6 address is not plumbed with $CLIENT_IP_ADDR_V6 address"
+	    generate_report "$_message_" FAIL
+    fi
+else
+    $IPADM show-addr | $GREP addrconf >/dev/null 2>&1
+	if [ $? -eq 0 ]; then
+        _message_="IPV6 address is auto-configured"
+	    generate_report "$_message_" FAIL
+    else
+        _message_="IPV6 address is not auto-configured"
+	    generate_report "$_message_" PASS
+    fi
+fi
+}
+
+### Function: check_ipv6_hosts_entry ###
+#
+# Verify if ephemeral port allocation algorithm is correct
+#
+# Arguments:
+#	none
+# Return Values:
+#	none
+check_ipv6_hosts_entry()
+{
+_hosts_file_=/etc/inet/hosts
+if [[ $CLIENT_IP_ADDR_V6 != "none" ]]; then	
+    _hosts_entry_=`$ECHO ${CLIENT_IP_ADDR_V6}|$NAWK -F/ '{print $1}' | $SED 's/:0/:/g'`
+    _hosts_file_entry_=`$CAT $_hosts_file_  | $SED 's/:0/:/g'`
+    if [ ${_hosts_entry_} ]; then
+
+        $ECHO ${_hosts_file_entry_} | $GREP ${_hosts_entry_} >> /dev/null
+        if [ $? -eq 0 ]; then
+            _message_="IPV6 address entry is added in $_hosts_file_"
+	        generate_report "$_message_" PASS
+        else
+            _message_="IPV6 address entry is not added in $_hosts_file_"
+	        generate_report "$_message_" FAIL
+        fi
+    fi
+else
+    $GREP none $_hosts_file_ >> /dev/null
+	if [ $? -ne 0 ]; then
+        _message_="IPV6 address entry is not added in $_hosts_file_"
+	    generate_report "$_message_" PASS
+    else
+        _message_="IPV6 address entry is added in $_hosts_file_"
+	    generate_report "$_message_" FAIL
+    fi
+fi
+}
+# ********************************************************************
+#
+# 	Main body of program
+#
+# ********************************************************************
+#
+
+# TEST_REPORT 
+if [ ! "${TEST_REPORT}" ]; then
+    TEST_REPORT="/tmp/first_boot_audit.log"
+fi
+
+# Check/Create TEST_REPORT
+chk_create_test_report
+
+
+$CLEAR
+SCRIPT_NAME=`$BASENAME $0`
+_script_run_time_
+$ECHO "\n$RUN_TIME Executing script $SCRIPT_NAME" | $TEE -a $TEST_REPORT
+
+if [[ -d "/eniq/" ]]; then
+	SW_MAIN_DIR=/eniq
+	SW_CONF_DIR=/eniq/installation/config
+else
+	SW_MAIN_DIR=/ericsson
+	SW_CONF_DIR=/ericsson/config
+fi
+
+_pass_count_=0
+_fail_count_=0
+_info_count_=0
+
+$CLEAR
+check_gdm_service
+
+check_firstboot_package
+
+check_firstboot_service
+
+#config_directory
+
+#save_installation_params
+
+allow_root_ssh
+
+update_syslog
+
+check_ephemeral
+
+configure_mws
+
+check_bootrap_sw_bundle
+
+unset_publisher
+
+check_ipv6_addr_setup
+
+check_ipv6_hosts_entry
+
+$ECHO "\n########################### Summary #############################" | $TEE -a $TEST_REPORT
+$ECHO "\nNumber of Test Cases Passed : $_pass_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nNumber of Test Cases Failed : $_fail_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nTotal Test Cases : $((_pass_count_+_fail_count_))" | $TEE -a $TEST_REPORT
+$ECHO "\nInformation messages : $_info_count_" | $TEE -a $TEST_REPORT
+$ECHO "\nFor Additional details check ${TEST_REPORT}" | $TEE -a $TEST_REPORT
+$ECHO "\n###################### End Of Test Report #######################" | $TEE -a $TEST_REPORT
+
+$ECHO "\n$RUN_TIME Successfully finished executing generic_finish_test" | $TEE -a $TEST_REPORT
+
+if [ $_fail_count_ -ne 0 ]; then
+    exit 1
+else
+    exit 0
+fi

@@ -1,0 +1,10 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="manageInstallServiceSuite">
+    <test name="Manage_Install_Service">
+        <classes>
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceListScenario" />
+            <class name="com.ericsson.infrastructure.test.cases.ManageInstallServiceRemoveByNameScenario" />                    
+	</classes>
+    </test>
+</suite>
+

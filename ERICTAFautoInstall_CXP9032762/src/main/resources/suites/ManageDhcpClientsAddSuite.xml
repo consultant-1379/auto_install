@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suite name="manageDhcpClientsAdd">
+    <test name="manageDhcpClientsAdd">
+        <classes>
+        	<class name="com.ericsson.infrastructure.test.cases.ManageDhcpClientsAddScenario" />
+            </classes>
+    </test>
+</suite>

@@ -1,0 +1,9 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="removeMediaSuite">
+    <test name="removeMediaSuite">
+        <classes>
+        	<class name="com.ericsson.infrastructure.test.cases.RemoveMediaOnMwsScenario" />
+            </classes>
+    </test>
+</suite>
+
